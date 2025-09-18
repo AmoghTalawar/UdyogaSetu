@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Clerk component overrides */
+.cl-internal-uumn80 {
+    display: inline-block;
+    height: 340%;
+    width: 100%;
+    object-fit: contain;
+}
+
+/* Simple logo loading fix */
+.logo-stable {
+    display: block !important;
+    object-fit: contain !important;
+    flex-shrink: 0 !important;
+}
+
+/* Real-time notification animations */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.animate-slide-in-right {
+    animation: slideInRight 0.3s ease-out;
+}
+
+/* Pulse animation for live indicator */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
