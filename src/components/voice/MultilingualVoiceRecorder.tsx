@@ -2,6 +2,26 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Square, Play, Pause, RotateCcw, Volume2, AlertCircle, CheckCircle, Globe, FileText } from 'lucide-react';
 import { parseTranscriptToResume } from '../../utils/resumeParser';
 
+// Type declarations for Web Speech API
+declare global {
+  interface Window {
+    webkitSpeechRecognition: any;
+    SpeechRecognition: any;
+  }
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: (event: any) => void;
+  onerror: (event: any) => void;
+  onend: () => void;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
 interface Language {
   code: string;
   name: string;
@@ -34,6 +54,7 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
   const [generatedResume, setGeneratedResume] = useState<any>(null);
   const [isGeneratingResume, setIsGeneratingResume] = useState(false);
   const [showTranscriptEdit, setShowTranscriptEdit] = useState(false);
+  const [isHttpsRequired, setIsHttpsRequired] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -53,21 +74,31 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
     'kn-IN': "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಬಗ್ಗೆ, ನಿಮ್ಮ ಅನುಭವ, ಕೌಶಲ್ಯಗಳು, ಶಿಕ್ಷಣ, ಮತ್ತು ಈ ಹುದ್ದೆಯಲ್ಲಿ ನಿಮ್ಮ ಆಸಕ್ತಿಯ ಬಗ್ಗೆ ಹೇಳಿ। ಸ್ಪಷ್ಟವಾಗಿ ಮಾತನಾಡಿ ಮತ್ತು ನಿಮ್ಮ ಸಮಯವನ್ನು ತೆಗೆದುಕೊಳ್ಳಿ।"
   };
 
+  // Check HTTPS requirement for mobile devices
+  useEffect(() => {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isHttps = window.location.protocol === 'https:';
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    // Voice features require HTTPS on mobile devices (except localhost for development)
+    setIsHttpsRequired(isMobile && !isHttps && !isLocalhost);
+  }, []);
+
   // Initialize speech recognition
   useEffect(() => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
-      
+
       if (recognitionRef.current) {
         recognitionRef.current.continuous = true;
         recognitionRef.current.interimResults = true;
         recognitionRef.current.lang = selectedLanguage;
-        
+
         recognitionRef.current.onresult = (event: any) => {
           let finalTranscript = '';
           let interimTranscript = '';
-          
+
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcriptText = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
@@ -76,13 +107,13 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
               interimTranscript += transcriptText;
             }
           }
-          
+
           setTranscript(prev => {
             const newTranscript = prev + finalTranscript;
             return newTranscript;
           });
         };
-        
+
         recognitionRef.current.onerror = (event: any) => {
           console.error('Speech recognition error:', event.error);
           if (event.error !== 'no-speech') {
@@ -329,8 +360,41 @@ Generated on: ${new Date(resume.generatedAt).toLocaleDateString()}
 `.trim();
   };
 
+  // Check if speech recognition is supported
+  const isSpeechRecognitionSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+
   return (
     <div className={`bg-white rounded-lg border border-gray-200 p-6 ${className}`}>
+      {/* HTTPS Warning for Mobile */}
+      {isHttpsRequired && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center space-x-2 mb-2">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <h4 className="font-semibold text-red-800">HTTPS Required for Voice Features</h4>
+          </div>
+          <p className="text-sm text-red-700 mb-3">
+            Voice recording and speech recognition require a secure HTTPS connection on mobile devices.
+            Please access this application through a secure connection (https://) to use voice features.
+          </p>
+          <div className="text-xs text-red-600">
+            <strong>Note:</strong> This is a browser security requirement for mobile devices.
+          </div>
+        </div>
+      )}
+
+      {/* Browser Support Warning */}
+      {!isSpeechRecognitionSupported && (
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center space-x-2 mb-2">
+            <AlertCircle className="w-5 h-5 text-yellow-600" />
+            <h4 className="font-semibold text-yellow-800">Speech Recognition Not Supported</h4>
+          </div>
+          <p className="text-sm text-yellow-700">
+            Your browser doesn't support speech recognition. Please use Chrome, Firefox, Safari, or Edge for the best experience.
+          </p>
+        </div>
+      )}
+
       {/* Language Selection */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -368,7 +432,12 @@ Generated on: ${new Date(resume.generatedAt).toLocaleDateString()}
         {!isRecording && !audioBlob && (
           <button
             onClick={startRecording}
-            className="w-20 h-20 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 focus:ring-4 focus:ring-red-200 focus:outline-none mx-auto"
+            disabled={isHttpsRequired || !isSpeechRecognitionSupported}
+            className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 focus:ring-4 focus:outline-none mx-auto ${
+              isHttpsRequired || !isSpeechRecognitionSupported
+                ? 'bg-gray-400 cursor-not-allowed text-gray-200'
+                : 'bg-red-500 hover:bg-red-600 text-white hover:scale-105 focus:ring-red-200'
+            }`}
           >
             <Mic className="w-8 h-8" />
           </button>

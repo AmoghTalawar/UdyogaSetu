@@ -92,6 +92,7 @@ CREATE TABLE applications (
 -- Uploaded files table (resumes, voice recordings, etc.)
 CREATE TABLE uploaded_files (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    upload_id text, -- Temporary ID for upload process (can be null after linking to application)
     application_id uuid, -- Can be null for general uploads
     file_name text NOT NULL,
     file_path text NOT NULL, -- Storage path
@@ -229,6 +230,7 @@ CREATE INDEX idx_applications_reviewed_by ON applications(reviewed_by);
 CREATE INDEX idx_applications_kiosk_id ON applications(kiosk_id);
 
 -- Uploaded files indexes
+CREATE INDEX idx_uploaded_files_upload_id ON uploaded_files(upload_id);
 CREATE INDEX idx_uploaded_files_application_id ON uploaded_files(application_id);
 CREATE INDEX idx_uploaded_files_category ON uploaded_files(file_category);
 CREATE INDEX idx_uploaded_files_uploaded_at ON uploaded_files(uploaded_at);

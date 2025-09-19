@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { QrCode, Mic, Upload, Search, CheckCircle2, AlertCircle, Phone } from 'lucide-react';
 import QRScanner from '../components/kiosk/QRScanner';
 import VoiceRecorder from '../components/voice/VoiceRecorder';
 import SuccessPopup from '../components/common/SuccessPopup';
-import { 
-  submitApplication, 
-  uploadResumeToSupabase, 
+import {
+  submitApplication,
+  uploadResumeToSupabase,
   checkApplicationStatus,
   APPLICATION_METHOD,
-  APPLICATION_STATUS 
+  APPLICATION_STATUS
 } from '../utils/supabase';
 import { ApplicationWithDetails } from '../utils/database.types';
+import { getUploadedFile } from '../utils/fileStorage';
 
 interface KioskPageProps {
   onNavigate?: (page: string) => void;
@@ -34,6 +35,11 @@ const KioskPage: React.FC<KioskPageProps> = ({ onNavigate }) => {
     const urlParams = new URLSearchParams(window.location.search);
     return urlParams.get('job');
   });
+  const [uploadId, setUploadId] = useState<string | null>(() => {
+    // Get upload ID from URL parameters (for QR upload functionality)
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('uploadId');
+  });
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [jobTitle, setJobTitle] = useState('Job Position');
   
@@ -48,6 +54,28 @@ const KioskPage: React.FC<KioskPageProps> = ({ onNavigate }) => {
   // Status check
   const [statusPhone, setStatusPhone] = useState('');
   const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
+
+  // Check for uploaded file when uploadId is present
+  useEffect(() => {
+    const checkForUploadedFile = async () => {
+      if (uploadId) {
+        try {
+          console.log('Checking for uploaded file with uploadId:', uploadId);
+          const file = await getUploadedFile(uploadId);
+          if (file) {
+            setResumeFile(file);
+            console.log('File found and set:', file.name);
+          } else {
+            console.log('No file found for uploadId:', uploadId);
+          }
+        } catch (error) {
+          console.error('Error checking for uploaded file:', error);
+        }
+      }
+    };
+
+    checkForUploadedFile();
+  }, [uploadId]);
 
   const resetForm = () => {
     setApplicantName('');
@@ -151,7 +179,7 @@ const KioskPage: React.FC<KioskPageProps> = ({ onNavigate }) => {
         throw new Error(result.error || 'Failed to submit application');
       }
 
-      setSuccess(`Application submitted successfully! Application ID: ${result.data.id.substring(0, 8)}`);
+      setSuccess('Application submitted successfully!');
       setShowSuccessPopup(true);
       
       // Don't auto-reset form - let user close popup manually

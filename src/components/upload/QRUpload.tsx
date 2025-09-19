@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { QrCode, Smartphone, Upload, CheckCircle, RefreshCw, AlertCircle, X } from 'lucide-react';
-import { getUploadedFile, cleanupOldFiles } from '../../utils/fileStorage';
+import { cleanupOldFiles } from '../../utils/fileStorage';
+import { checkSupabaseUpload, supabase } from '../../utils/supabase';
+import QRCode from 'qrcode';
 
 interface QRUploadProps {
   onFileReceived: (file: File) => void;
@@ -57,34 +59,54 @@ const QRUpload: React.FC<QRUploadProps> = ({ onFileReceived, onClose, className 
     try {
       // Clean up old files first
       await cleanupOldFiles();
-      
+
       // Generate unique upload ID
       const id = Math.random().toString(36).substring(2, 15);
       setUploadId(id);
 
-      // Get network IP for mobile access
-      const networkIP = import.meta.env.VITE_LOCAL_IP || getLocalNetworkIP();
-      
-      // Get current port from window location or use default
-      const currentPort = window.location.port || '5173';
-      
-      // Generate kiosk application URL with job ID if provided
-      let kioskUrl;
-      if (jobId) {
-        kioskUrl = `http://${networkIP}:${currentPort}/kiosk?job=${jobId}`;
-      } else {
-        // Fallback to general kiosk URL
-        kioskUrl = `http://${networkIP}:${currentPort}/kiosk`;
+      // Generate kiosk application URL - use production URL for Vercel deployment
+      const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+      const baseUrl = isProduction
+        ? `${window.location.protocol}//${window.location.host}`
+        : (() => {
+            // For local development, use the configured IP or fallback
+            const networkIP = import.meta.env.VITE_LOCAL_IP || getLocalNetworkIP();
+            const currentPort = window.location.port || '5173';
+            return `http://${networkIP}:${currentPort}`;
+          })();
+
+      // Generate mobile upload URL with upload ID
+      const mobileUploadUrl = `${baseUrl}/mobile-upload/${id}`;
+
+      console.log('Generated mobile upload URL:', mobileUploadUrl);
+      console.log('Environment:', isProduction ? 'Production' : 'Development');
+      console.log('Base URL:', baseUrl);
+      console.log('Upload ID:', id);
+
+      // Generate QR code using client-side library
+      try {
+        const qrDataUrl = await QRCode.toDataURL(mobileUploadUrl, {
+          width: 200,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        });
+
+        console.log('QR Code generated successfully');
+        setQrCodeUrl(qrDataUrl);
+        setStatus('waiting');
+        setTimeRemaining(300); // Reset to 5 minutes
+      } catch (qrError) {
+        console.error('QRCode library failed, trying fallback:', qrError);
+
+        // Fallback to external service
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&format=png&data=${encodeURIComponent(mobileUploadUrl)}`;
+        setQrCodeUrl(qrUrl);
+        setStatus('waiting');
+        setTimeRemaining(300);
       }
-      
-      console.log('Generated kiosk URL:', kioskUrl);
-      
-      // Generate QR code using a QR code service (in production, use a proper QR library)
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(kioskUrl)}`;
-      setQrCodeUrl(qrUrl);
-      
-      setStatus('waiting');
-      setTimeRemaining(300); // Reset to 5 minutes
     } catch (error) {
       console.error('Failed to generate QR code:', error);
       setStatus('error');
@@ -98,20 +120,53 @@ const QRUpload: React.FC<QRUploadProps> = ({ onFileReceived, onClose, className 
     if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
       return hostname;
     }
-    
-    // Fallback IP addresses (user should configure in .env)
-    return '192.168.1.100'; // Default fallback
+
+    // Try to get IP from various sources
+    // Check if we're running on a local network IP already
+    if (hostname.match(/^192\.168\./) || hostname.match(/^10\./) || hostname.match(/^172\./)) {
+      return hostname;
+    }
+
+    // For local development, try common local IPs
+    // You can set VITE_LOCAL_IP in your .env file to override this
+    const possibleIPs = [
+      '192.168.1.100',  // Common home network
+      '192.168.0.100',
+      '10.0.0.100',     // Common corporate network
+      '172.16.0.100'
+    ];
+
+    // Return the first one, but user should configure VITE_LOCAL_IP
+    console.warn('Using default local IP. Set VITE_LOCAL_IP in .env for your network IP');
+    return possibleIPs[0];
   };
 
   const checkForUpload = async () => {
-    // Simplified: Just check local storage for file uploads
-    // This removes the complex Supabase and server dependencies
     try {
-      const file = await getUploadedFile(uploadId);
-      if (file && status === 'waiting') {
+      // Check Supabase for uploaded file
+      const uploadData = await checkSupabaseUpload(uploadId);
+      if (uploadData && status === 'waiting') {
+        console.log('File found in Supabase:', uploadData);
+
+        // Download the file from Supabase storage
+        const { data: fileBlob, error: downloadError } = await supabase.storage
+          .from('resumes')
+          .download((uploadData as any).file_path);
+
+        if (downloadError) {
+          console.error('Error downloading file:', downloadError);
+          return;
+        }
+
+        // Create a File object from the blob
+        const file = new File([fileBlob], (uploadData as any).file_name, {
+          type: (uploadData as any).file_type || 'application/octet-stream',
+          lastModified: new Date((uploadData as any).uploaded_at).getTime()
+        });
+
         setUploadedFile(file);
         setStatus('uploaded');
-        
+
         if (pollingInterval) {
           clearInterval(pollingInterval);
         }
@@ -209,8 +264,37 @@ const QRUpload: React.FC<QRUploadProps> = ({ onFileReceived, onClose, className 
               src={qrCodeUrl}
               alt="QR Code for file upload"
               className="w-48 h-48 mx-auto"
-              onError={() => setStatus('error')}
+              onError={() => {
+                console.error('QR Code image failed to load');
+                setStatus('error');
+              }}
             />
+          </div>
+
+          {/* Debug Info */}
+          <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
+            <div className="font-medium mb-1">Debug Info:</div>
+            <div>Upload ID: <code className="bg-white px-1 rounded">{uploadId}</code></div>
+            <div>QR Type: {qrCodeUrl.startsWith('data:') ? 'Client-side generated' : 'External service'}</div>
+            <div className="mt-2">
+              <button
+                onClick={() => {
+                  const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                  const baseUrl = isProduction
+                    ? `${window.location.protocol}//${window.location.host}`
+                    : (() => {
+                        const networkIP = import.meta.env.VITE_LOCAL_IP || getLocalNetworkIP();
+                        const currentPort = window.location.port || '5173';
+                        return `http://${networkIP}:${currentPort}`;
+                      })();
+                  const url = `${baseUrl}/mobile-upload/${uploadId}`;
+                  window.open(url, '_blank');
+                }}
+                className="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600"
+              >
+                Test Link (Opens in new tab)
+              </button>
+            </div>
           </div>
           
           {/* Instructions */}
@@ -244,11 +328,16 @@ const QRUpload: React.FC<QRUploadProps> = ({ onFileReceived, onClose, className 
               <p className="text-xs text-gray-600 mb-2">Copy this URL to your phone's browser:</p>
               <code className="text-xs bg-white px-2 py-1 rounded border break-all">
                 {(() => {
-                  const networkIP = import.meta.env.VITE_LOCAL_IP || getLocalNetworkIP();
-                  const currentPort = window.location.port || '5173';
-                  return jobId 
-                    ? `http://${networkIP}:${currentPort}/kiosk?job=${jobId}`
-                    : `http://${networkIP}:${currentPort}/kiosk`;
+                  const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                  const baseUrl = isProduction
+                    ? `${window.location.protocol}//${window.location.host}`
+                    : (() => {
+                        const networkIP = import.meta.env.VITE_LOCAL_IP || getLocalNetworkIP();
+                        const currentPort = window.location.port || '5173';
+                        return `http://${networkIP}:${currentPort}`;
+                      })();
+
+                  return `${baseUrl}/mobile-upload/${uploadId}`;
                 })()}
               </code>
             </div>

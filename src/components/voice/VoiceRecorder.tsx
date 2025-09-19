@@ -28,6 +28,17 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const [speechRecognition, setSpeechRecognition] = useState<any>(null);
   const [liveTranscript, setLiveTranscript] = useState('');
   const [finalTranscript, setFinalTranscript] = useState('');
+  const [isHttpsRequired, setIsHttpsRequired] = useState(false);
+
+  // Check HTTPS requirement for mobile devices
+  useEffect(() => {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isHttps = window.location.protocol === 'https:';
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    // Voice features require HTTPS on mobile devices (except localhost for development)
+    setIsHttpsRequired(isMobile && !isHttps && !isLocalhost);
+  }, []);
 
   // Handle errors
   useEffect(() => {
@@ -241,6 +252,19 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
   return (
     <div className={`bg-white rounded-lg border border-gray-200 p-6 ${className}`}>
+      {/* HTTPS Warning for Mobile */}
+      {isHttpsRequired && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center space-x-2 mb-2">
+            <AlertCircle className="w-4 h-4 text-red-600" />
+            <span className="text-sm font-medium text-red-800">HTTPS Required for Voice Features</span>
+          </div>
+          <p className="text-xs text-red-700">
+            Voice recording requires a secure HTTPS connection on mobile devices. Please access this application through https:// to use voice features.
+          </p>
+        </div>
+      )}
+
       {/* Permission Status */}
       {/* Optimization Status */}
       {!isOptimized && (
