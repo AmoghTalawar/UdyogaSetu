@@ -138,9 +138,9 @@ const MobileUpload: React.FC<MobileUploadProps> = ({ uploadId }) => {
       };
 
       // Save application data to database
-      // For mobile uploads, we use placeholder UUIDs since there's no specific job or company
+      // For mobile uploads, we use an existing job ID since job_id has a foreign key constraint
       const applicationRecord = {
-        job_id: '00000000-0000-0000-0000-000000000000', // Placeholder UUID for mobile uploads
+        job_id: '1', // Use existing job ID from database (first job in mock data)
         applicant_name: applicationData.applicantName,
         applicant_email: applicationData.applicantEmail || null,
         applicant_phone: applicationData.applicantPhone,
