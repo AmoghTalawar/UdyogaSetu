@@ -4,19 +4,38 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { Language } from '../../types';
 import { useUser, useAuth, SignedIn, SignedOut } from '@clerk/clerk-react';
 
+// Helper hook to safely use Clerk hooks only when ClerkProvider is available
+const useClerkSafe = () => {
+  try {
+    const userHook = useUser();
+    const authHook = useAuth();
+    return {
+      user: userHook.user,
+      auth: authHook,
+      isClerkAvailable: true
+    };
+  } catch (error) {
+    // ClerkProvider not available, return safe defaults
+    return {
+      user: null,
+      auth: { signOut: () => Promise.resolve() },
+      isClerkAvailable: false
+    };
+  }
+};
+
 interface HeaderProps {
   onNavigate?: (page: string) => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ onNavigate }) => {
   const { t, language, setLanguage } = useLanguage();
-  const { user } = useUser();
-  const { signOut } = useAuth();
+  const { user, auth, isClerkAvailable } = useClerkSafe();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleSignOut = async () => {
-    await signOut();
+    await auth.signOut();
     onNavigate?.('home');
   };
 
@@ -93,51 +112,60 @@ const Header: React.FC<HeaderProps> = ({ onNavigate }) => {
             </div>
 
             {/* Conditional Navigation based on Auth Status */}
-            <SignedOut>
-              {/* Company Authentication Links for non-authenticated users */}
-              <button 
-                onClick={() => onNavigate?.('company-signup')}
-                className="bg-[#0B63E5] text-white px-4 py-2 rounded-lg hover:bg-[#0B63E5]/90 text-sm font-medium transition-colors"
-              >
-                {t('nav.companySignup')}
-              </button>
+            {isClerkAvailable ? (
+              <>
+                <SignedOut>
+                  {/* Company Authentication Links for non-authenticated users */}
+                  <button
+                    onClick={() => onNavigate?.('company-signup')}
+                    className="bg-[#0B63E5] text-white px-4 py-2 rounded-lg hover:bg-[#0B63E5]/90 text-sm font-medium transition-colors"
+                  >
+                    {t('nav.companySignup')}
+                  </button>
 
-              <button 
-                onClick={() => onNavigate?.('company-login')}
-                className="text-[#0B63E5] font-medium hover:text-[#0B63E5]/80 text-sm"
-              >
-                {t('nav.companyLogin')}
-              </button>
-            </SignedOut>
+                  <button
+                    onClick={() => onNavigate?.('company-login')}
+                    className="text-[#0B63E5] font-medium hover:text-[#0B63E5]/80 text-sm"
+                  >
+                    {t('nav.companyLogin')}
+                  </button>
+                </SignedOut>
 
-            <SignedIn>
-              {/* Dashboard and user menu for authenticated users */}
-              <button 
-                onClick={() => onNavigate?.('company-dashboard')}
-                className="flex items-center space-x-2 text-[#0B63E5] font-medium hover:text-[#0B63E5]/80 text-sm"
-              >
-                <LayoutDashboard className="w-4 h-4" />
-                <span>{t('nav.dashboard')}</span>
-              </button>
+                <SignedIn>
+                  {/* Dashboard and user menu for authenticated users */}
+                  <button
+                    onClick={() => onNavigate?.('company-dashboard')}
+                    className="flex items-center space-x-2 text-[#0B63E5] font-medium hover:text-[#0B63E5]/80 text-sm"
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    <span>{t('nav.dashboard')}</span>
+                  </button>
 
-              <div className="flex items-center space-x-3">
-                <img
-                  src={user?.imageUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face'}
-                  alt="Profile"
-                  className="w-8 h-8 rounded-full"
-                />
-                <div className="text-sm">
-                  <div className="font-medium text-gray-900">{user?.fullName || 'Company User'}</div>
-                </div>
-                <button
-                  onClick={handleSignOut}
-                  className="text-sm text-gray-500 hover:text-gray-700 flex items-center space-x-1"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Sign out</span>
-                </button>
+                  <div className="flex items-center space-x-3">
+                    <img
+                      src={user?.imageUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face'}
+                      alt="Profile"
+                      className="w-8 h-8 rounded-full"
+                    />
+                    <div className="text-sm">
+                      <div className="font-medium text-gray-900">{user?.fullName || 'Company User'}</div>
+                    </div>
+                    <button
+                      onClick={handleSignOut}
+                      className="text-sm text-gray-500 hover:text-gray-700 flex items-center space-x-1"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Sign out</span>
+                    </button>
+                  </div>
+                </SignedIn>
+              </>
+            ) : (
+              /* Public routes - show basic navigation without auth */
+              <div className="text-sm text-gray-600">
+                Public Access
               </div>
-            </SignedIn>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -194,57 +222,66 @@ const Header: React.FC<HeaderProps> = ({ onNavigate }) => {
               </div>
 
               {/* Conditional Mobile Navigation */}
-              <SignedOut>
-                <div className="space-y-3">
-                  <button 
-                    onClick={() => onNavigate?.('company-signup')}
-                    className="block w-full bg-[#0B63E5] text-white py-3 px-4 rounded-lg font-medium text-center"
-                  >
-                    {t('nav.companySignup')}
-                  </button>
-                  <button 
-                    onClick={() => onNavigate?.('company-login')}
-                    className="block w-full border-2 border-[#0B63E5] text-[#0B63E5] py-3 px-4 rounded-lg font-medium text-center"
-                  >
-                    {t('nav.companyLogin')}
-                  </button>
-                </div>
-              </SignedOut>
-              
-              <SignedIn>
-                <div className="space-y-3">
-                  {/* User Info */}
-                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                    <img
-                      src={user?.imageUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face'}
-                      alt="Profile"
-                      className="w-8 h-8 rounded-full"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900">{user?.fullName || 'Company User'}</div>
-                      <div className="text-sm text-gray-600">{user?.primaryEmailAddress?.emailAddress}</div>
+              {isClerkAvailable ? (
+                <>
+                  <SignedOut>
+                    <div className="space-y-3">
+                      <button
+                        onClick={() => onNavigate?.('company-signup')}
+                        className="block w-full bg-[#0B63E5] text-white py-3 px-4 rounded-lg font-medium text-center"
+                      >
+                        {t('nav.companySignup')}
+                      </button>
+                      <button
+                        onClick={() => onNavigate?.('company-login')}
+                        className="block w-full border-2 border-[#0B63E5] text-[#0B63E5] py-3 px-4 rounded-lg font-medium text-center"
+                      >
+                        {t('nav.companyLogin')}
+                      </button>
                     </div>
-                  </div>
-                  
-                  {/* Dashboard Button */}
-                  <button 
-                    onClick={() => onNavigate?.('company-dashboard')}
-                    className="flex items-center justify-center space-x-2 w-full bg-[#0B63E5] text-white py-3 px-4 rounded-lg font-medium"
-                  >
-                    <LayoutDashboard className="w-4 h-4" />
-                    <span>{t('nav.dashboard')}</span>
-                  </button>
-                  
-                  {/* Sign Out Button */}
-                  <button 
-                    onClick={handleSignOut}
-                    className="flex items-center justify-center space-x-2 w-full border-2 border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Sign Out</span>
-                  </button>
+                  </SignedOut>
+
+                  <SignedIn>
+                    <div className="space-y-3">
+                      {/* User Info */}
+                      <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                        <img
+                          src={user?.imageUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face'}
+                          alt="Profile"
+                          className="w-8 h-8 rounded-full"
+                        />
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">{user?.fullName || 'Company User'}</div>
+                          <div className="text-sm text-gray-600">{user?.primaryEmailAddress?.emailAddress}</div>
+                        </div>
+                      </div>
+
+                      {/* Dashboard Button */}
+                      <button
+                        onClick={() => onNavigate?.('company-dashboard')}
+                        className="flex items-center justify-center space-x-2 w-full bg-[#0B63E5] text-white py-3 px-4 rounded-lg font-medium"
+                      >
+                        <LayoutDashboard className="w-4 h-4" />
+                        <span>{t('nav.dashboard')}</span>
+                      </button>
+
+                      {/* Sign Out Button */}
+                      <button
+                        onClick={handleSignOut}
+                        className="flex items-center justify-center space-x-2 w-full border-2 border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  </SignedIn>
+                </>
+              ) : (
+                /* Public routes - show basic navigation without auth */
+                <div className="text-sm text-gray-600 text-center py-3">
+                  Public Access Mode
                 </div>
-              </SignedIn>
+              )}
             </div>
           </div>
         )}
