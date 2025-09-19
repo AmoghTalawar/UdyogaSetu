@@ -30,12 +30,12 @@ function App() {
     // Check URL parameters on app load
     const path = window.location.pathname;
 
-    // Handle mobile upload routes
+    // Handle mobile upload routes (no auth required)
     if (path.startsWith('/mobile-upload/')) {
       return 'mobile-upload';
     }
 
-    // Handle kiosk with job parameter
+    // Handle kiosk with job parameter (no auth required)
     if (path === '/kiosk' || path.startsWith('/kiosk')) {
       return 'kiosk';
     }
@@ -113,8 +113,15 @@ function App() {
     }
     window.history.pushState({}, '', url);
   };
-  
-  if (!clerkPubKey) {
+
+  // Check if current route requires authentication
+  const requiresAuth = () => {
+    return !['mobile-upload', 'kiosk'].includes(currentPage) &&
+           !currentPage.startsWith('course-detail/');
+  };
+
+  // Only check Clerk key if authentication is required
+  if (requiresAuth() && !clerkPubKey) {
     return (
       <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
         <h1 style={{ color: 'red' }}>Configuration Error</h1>
@@ -122,7 +129,7 @@ function App() {
       </div>
     );
   }
-  
+
   const renderPage = () => {
     try {
       if (currentPage.startsWith('course-detail/')) {
@@ -166,15 +173,27 @@ function App() {
     }
   };
   
-  return (
-    <ClerkProvider publishableKey={clerkPubKey}>
+  // Render with or without ClerkProvider based on route requirements
+  if (requiresAuth()) {
+    return (
+      <ClerkProvider publishableKey={clerkPubKey}>
+        <LanguageProvider>
+          <div className="App">
+            {renderPage()}
+          </div>
+        </LanguageProvider>
+      </ClerkProvider>
+    );
+  } else {
+    // Public routes (mobile-upload, kiosk) don't need Clerk authentication
+    return (
       <LanguageProvider>
         <div className="App">
           {renderPage()}
         </div>
       </LanguageProvider>
-    </ClerkProvider>
-  );
+    );
+  }
 }
 
 export default App;
