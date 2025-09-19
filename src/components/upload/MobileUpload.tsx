@@ -138,7 +138,7 @@ const MobileUpload: React.FC<MobileUploadProps> = ({ uploadId }) => {
       };
 
       // Save application data to database
-      // For mobile uploads, we use a placeholder UUID since there's no specific job
+      // For mobile uploads, we use placeholder UUIDs since there's no specific job or company
       const applicationRecord = {
         job_id: '00000000-0000-0000-0000-000000000000', // Placeholder UUID for mobile uploads
         applicant_name: applicationData.applicantName,
@@ -147,7 +147,7 @@ const MobileUpload: React.FC<MobileUploadProps> = ({ uploadId }) => {
         application_method: applicationData.method,
         resume_url: resumeResult?.publicUrl || null,
         resume_file_id: resumeResult?.fileId || null,
-        company_id: null, // Would be determined from job
+        company_id: '00000000-0000-0000-0000-000000000000', // Placeholder UUID for mobile uploads
         applicant_score: calculateApplicantScore(),
         applied_at: new Date().toISOString(),
         status: 'submitted'
