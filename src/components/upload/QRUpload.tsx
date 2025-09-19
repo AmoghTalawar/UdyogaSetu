@@ -271,31 +271,6 @@ const QRUpload: React.FC<QRUploadProps> = ({ onFileReceived, onClose, className 
             />
           </div>
 
-          {/* Debug Info */}
-          <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
-            <div className="font-medium mb-1">Debug Info:</div>
-            <div>Upload ID: <code className="bg-white px-1 rounded">{uploadId}</code></div>
-            <div>QR Type: {qrCodeUrl.startsWith('data:') ? 'Client-side generated' : 'External service'}</div>
-            <div className="mt-2">
-              <button
-                onClick={() => {
-                  const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-                  const baseUrl = isProduction
-                    ? `${window.location.protocol}//${window.location.host}`
-                    : (() => {
-                        const networkIP = import.meta.env.VITE_LOCAL_IP || getLocalNetworkIP();
-                        const currentPort = window.location.port || '5173';
-                        return `http://${networkIP}:${currentPort}`;
-                      })();
-                  const url = `${baseUrl}/mobile-upload/${uploadId}`;
-                  window.open(url, '_blank');
-                }}
-                className="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600"
-              >
-                Test Link (Opens in new tab)
-              </button>
-            </div>
-          </div>
           
           {/* Instructions */}
           <div className="mt-6 space-y-3">
