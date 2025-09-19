@@ -78,25 +78,32 @@ export class ApplicationService {
       
       // Get applications from both tables to ensure we capture all applications
       console.log('🔍 Querying both job_applications and applications tables...');
-      
+
       // Query job_applications table (for voice applications from ApplyModal)
       const { data: jobAppsData, error: jobAppsError } = await supabase
         .from('job_applications')
         .select('*')
         .in('job_id', jobIds)
         .order('applied_at', { ascending: false });
-      
+
       // Query applications table (for QR/kiosk applications)
       const { data: appsData, error: appsError } = await supabase
         .from('applications')
         .select('*')
         .in('job_id', jobIds)
         .order('created_at', { ascending: false });
+
+      // Query mobile uploads (applications with application_method = 'mobile')
+      const { data: mobileAppsData, error: mobileAppsError } = await supabase
+        .from('job_applications')
+        .select('*')
+        .eq('application_method', 'mobile')
+        .order('applied_at', { ascending: false });
       
       // Handle errors - if one table fails, continue with the other
-      let combinedData = [];
+      let combinedData: any[] = [];
       let hasErrors = false;
-      
+
       if (jobAppsError && !jobAppsError.message.includes('does not exist')) {
         console.error('Error from job_applications table:', jobAppsError);
         hasErrors = true;
@@ -104,19 +111,28 @@ export class ApplicationService {
         console.log('✅ Found', jobAppsData.length, 'applications in job_applications table');
         combinedData = [...combinedData, ...jobAppsData];
       }
-      
+
       if (appsError && !appsError.message.includes('does not exist')) {
         console.error('Error from applications table:', appsError);
         hasErrors = true;
       } else if (appsData) {
         console.log('✅ Found', appsData.length, 'applications in applications table');
         // Map applications table data to match job_applications schema
-        const mappedAppsData = appsData.map(app => ({
+        const mappedAppsData = appsData.map((app: any) => ({
           ...app,
           applied_at: app.created_at || app.applied_at,
           applicant_score: app.ai_score || app.applicant_score,
         }));
         combinedData = [...combinedData, ...mappedAppsData];
+      }
+
+      // Add mobile applications
+      if (mobileAppsError && !mobileAppsError.message.includes('does not exist')) {
+        console.error('Error from mobile applications query:', mobileAppsError);
+        hasErrors = true;
+      } else if (mobileAppsData) {
+        console.log('✅ Found', mobileAppsData.length, 'mobile applications');
+        combinedData = [...combinedData, ...mobileAppsData];
       }
       
       // If both queries failed with real errors (not table missing), throw error
@@ -262,16 +278,23 @@ export class ApplicationService {
         .from('job_applications')
         .select('status, applied_at, applicant_name')
         .in('job_id', jobIds);
-      
+
       const { data: appsData, error: appsError } = await supabase
         .from('applications')
         .select('status, created_at as applied_at, applicant_name')
         .in('job_id', jobIds);
-      
-      // Combine data from both tables
-      let combinedData = [];
+
+      // Get mobile applications for stats
+      const { data: mobileAppsData, error: mobileAppsError } = await supabase
+        .from('job_applications')
+        .select('status, applied_at, applicant_name')
+        .eq('application_method', 'mobile');
+
+      // Combine data from both tables and mobile applications
+      let combinedData: any[] = [];
       if (jobAppsData) combinedData = [...combinedData, ...jobAppsData];
       if (appsData) combinedData = [...combinedData, ...appsData];
+      if (mobileAppsData) combinedData = [...combinedData, ...mobileAppsData];
       
       const data = combinedData;
       const error = (jobAppsError && appsError) ? jobAppsError : null;
@@ -576,14 +599,17 @@ export class ApplicationService {
         .from('job_applications')
         .select('job_id')
         .in('job_id', jobIds);
-      
+
       const { data: appsData, error: appsError } = await supabase
         .from('applications')
         .select('job_id')
         .in('job_id', jobIds);
-      
+
+      // Get mobile application counts (these don't have job_id, so they won't be counted per job)
+      // Mobile applications are general applications not tied to specific jobs
+
       // Combine data from both tables
-      let combinedData = [];
+      let combinedData: any[] = [];
       if (jobAppsData) combinedData = [...combinedData, ...jobAppsData];
       if (appsData) combinedData = [...combinedData, ...appsData];
       
