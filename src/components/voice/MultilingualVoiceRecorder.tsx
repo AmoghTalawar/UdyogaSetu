@@ -55,6 +55,7 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
   const [isGeneratingResume, setIsGeneratingResume] = useState(false);
   const [showTranscriptEdit, setShowTranscriptEdit] = useState(false);
   const [isHttpsRequired, setIsHttpsRequired] = useState(false);
+  const [isSpeechRecognitionWorking, setIsSpeechRecognitionWorking] = useState(true);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -116,8 +117,46 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
 
         recognitionRef.current.onerror = (event: any) => {
           console.error('Speech recognition error:', event.error);
-          if (event.error !== 'no-speech') {
-            onError(`Speech recognition error: ${event.error}`);
+
+          // Handle different types of speech recognition errors
+          let errorMessage = '';
+          let isRecoverable = false;
+
+          switch (event.error) {
+            case 'network':
+              errorMessage = 'Speech recognition service is currently unavailable. This may be due to network connectivity issues or browser restrictions in production environments. Please try using the text-based application instead.';
+              isRecoverable = false;
+              break;
+            case 'not-allowed':
+              errorMessage = 'Microphone access was denied. Please allow microphone access and try again.';
+              isRecoverable = true;
+              break;
+            case 'no-speech':
+              // This is normal when no speech is detected, don't show error
+              return;
+            case 'aborted':
+              errorMessage = 'Speech recognition was interrupted. Please try recording again.';
+              isRecoverable = true;
+              break;
+            case 'audio-capture':
+              errorMessage = 'Audio capture failed. Please check your microphone and try again.';
+              isRecoverable = true;
+              break;
+            case 'service-not-allowed':
+              errorMessage = 'Speech recognition service is not allowed in this context. Please try using the text-based application instead.';
+              isRecoverable = false;
+              break;
+            default:
+              errorMessage = `Speech recognition error: ${event.error}. Please try using the text-based application instead.`;
+              isRecoverable = false;
+          }
+
+          // Set a flag to indicate speech recognition is not working
+          setIsSpeechRecognitionWorking(false);
+
+          // Only call onError for non-recoverable errors or let the UI handle recoverable ones
+          if (!isRecoverable) {
+            onError(errorMessage);
           }
         };
       }
@@ -194,10 +233,15 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
       mediaRecorderRef.current.start();
       setIsRecording(true);
 
-      // Start speech recognition
-      if (recognitionRef.current) {
-        recognitionRef.current.lang = selectedLanguage;
-        recognitionRef.current.start();
+      // Start speech recognition (if available and working)
+      if (recognitionRef.current && isSpeechRecognitionWorking) {
+        try {
+          recognitionRef.current.lang = selectedLanguage;
+          recognitionRef.current.start();
+        } catch (error) {
+          console.warn('Speech recognition start failed:', error);
+          // Continue with recording even if speech recognition fails
+        }
       }
 
     } catch (error) {
@@ -316,8 +360,10 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
 
 
   const handleComplete = () => {
-    if (audioBlob && transcript && generatedResume) {
-      onRecordingComplete(audioBlob, transcript, selectedLanguage, generatedResume);
+    if (audioBlob) {
+      // Allow completion even without transcript if speech recognition failed
+      const finalTranscript = transcript || 'Voice recording completed - transcript entered manually';
+      onRecordingComplete(audioBlob, finalTranscript, selectedLanguage, generatedResume);
       // Reset the component after successful completion
       resetRecording();
     }
@@ -395,6 +441,27 @@ Generated on: ${new Date(resume.generatedAt).toLocaleDateString()}
         </div>
       )}
 
+      {/* Speech Recognition Service Warning */}
+      {isSpeechRecognitionSupported && !isSpeechRecognitionWorking && (
+        <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+          <div className="flex items-center space-x-2 mb-2">
+            <AlertCircle className="w-5 h-5 text-orange-600" />
+            <h4 className="font-semibold text-orange-800">Speech Recognition Service Unavailable</h4>
+          </div>
+          <p className="text-sm text-orange-700 mb-3">
+            The speech recognition service is currently unavailable. This may be due to network connectivity issues or browser restrictions in production environments.
+          </p>
+          <div className="bg-orange-100 p-3 rounded-lg">
+            <p className="text-sm text-orange-800 mb-2">
+              <strong>Alternative:</strong> You can still record your voice and manually enter your information, or use the text-based application method.
+            </p>
+            <p className="text-xs text-orange-700">
+              Voice recording will work, but automatic transcription may not be available.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Language Selection */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -422,9 +489,16 @@ Generated on: ${new Date(resume.generatedAt).toLocaleDateString()}
       {/* Instructions */}
       <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <h4 className="font-medium text-blue-900 mb-2">Recording Instructions</h4>
-        <p className="text-sm text-blue-800">
+        <p className="text-sm text-blue-800 mb-2">
           {prompts[selectedLanguage as keyof typeof prompts]}
         </p>
+        {!isSpeechRecognitionWorking && (
+          <div className="bg-orange-100 border border-orange-300 rounded-lg p-3 mt-3">
+            <p className="text-sm text-orange-800">
+              <strong>Note:</strong> Automatic speech-to-text transcription is currently unavailable. You can still record your voice and manually enter your information afterward.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Recording Controls */}
@@ -432,12 +506,21 @@ Generated on: ${new Date(resume.generatedAt).toLocaleDateString()}
         {!isRecording && !audioBlob && (
           <button
             onClick={startRecording}
-            disabled={isHttpsRequired || !isSpeechRecognitionSupported}
+            disabled={isHttpsRequired}
             className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 focus:ring-4 focus:outline-none mx-auto ${
-              isHttpsRequired || !isSpeechRecognitionSupported
+              isHttpsRequired
                 ? 'bg-gray-400 cursor-not-allowed text-gray-200'
                 : 'bg-red-500 hover:bg-red-600 text-white hover:scale-105 focus:ring-red-200'
             }`}
+            title={
+              isHttpsRequired
+                ? 'HTTPS required for voice features on mobile'
+                : !isSpeechRecognitionSupported
+                ? 'Start voice recording (transcription not supported in this browser)'
+                : isSpeechRecognitionWorking
+                ? 'Start voice recording with automatic transcription'
+                : 'Start voice recording (transcription may not work)'
+            }
           >
             <Mic className="w-8 h-8" />
           </button>
@@ -515,10 +598,15 @@ Generated on: ${new Date(resume.generatedAt).toLocaleDateString()}
       )}
 
       {/* Transcript Section */}
-      {transcript && (
+      {(transcript || !isSpeechRecognitionWorking) && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="font-medium text-gray-900">Transcript</h4>
+            <h4 className="font-medium text-gray-900">
+              Transcript
+              {!isSpeechRecognitionWorking && (
+                <span className="ml-2 text-sm text-orange-600 font-normal">(Manual Entry Required)</span>
+              )}
+            </h4>
             <button
               onClick={() => setShowTranscriptEdit(!showTranscriptEdit)}
               className="text-blue-600 hover:text-blue-700 text-sm"
@@ -526,18 +614,32 @@ Generated on: ${new Date(resume.generatedAt).toLocaleDateString()}
               {showTranscriptEdit ? 'Hide' : 'Edit'}
             </button>
           </div>
-          
+
+          {!isSpeechRecognitionWorking && !transcript && (
+            <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <p className="text-sm text-orange-800">
+                <strong>Speech recognition is unavailable.</strong> Please manually enter your information below after recording your voice.
+              </p>
+            </div>
+          )}
+
           {showTranscriptEdit ? (
             <textarea
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
               className="w-full p-3 border border-gray-300 rounded-lg resize-none"
               rows={6}
-              placeholder="Edit your transcript here..."
+              placeholder={
+                !isSpeechRecognitionWorking
+                  ? "Please enter your personal and professional information here..."
+                  : "Edit your transcript here..."
+              }
             />
           ) : (
             <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 max-h-32 overflow-y-auto">
-              {transcript || 'Transcription will appear here as you speak...'}
+              {transcript || (!isSpeechRecognitionWorking
+                ? 'Please manually enter your information here after recording...'
+                : 'Transcription will appear here as you speak...')}
             </div>
           )}
         </div>
@@ -589,19 +691,37 @@ Generated on: ${new Date(resume.generatedAt).toLocaleDateString()}
       )}
 
       {/* Review and Apply Button */}
-      {audioBlob && transcript && generatedResume && !isGeneratingResume && (
+      {audioBlob && !isGeneratingResume && (
         <div className="text-center">
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
             <p className="text-sm text-yellow-800 mb-2">
               📝 <strong>Review Required:</strong> Please complete your personal information below to proceed with your application.
             </p>
             <p className="text-xs text-yellow-700">
-              Your resume has been automatically generated from your voice recording.
+              {generatedResume
+                ? 'Your resume has been automatically generated from your voice recording.'
+                : 'Please enter your information manually to generate your resume.'
+              }
             </p>
+            {!isSpeechRecognitionWorking && (
+              <p className="text-xs text-orange-700 mt-2">
+                💡 <strong>Tip:</strong> Since speech recognition is unavailable, please manually enter your information in the transcript section above.
+              </p>
+            )}
           </div>
           <button
             onClick={handleComplete}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2 mx-auto"
+            disabled={!transcript && !generatedResume}
+            className={`px-8 py-3 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2 mx-auto ${
+              !transcript && !generatedResume
+                ? 'bg-gray-400 cursor-not-allowed text-gray-200'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
+            title={
+              !transcript && !generatedResume
+                ? 'Please enter your information or wait for resume generation'
+                : 'Proceed with your application'
+            }
           >
             <FileText className="w-4 h-4" />
             <span>Review and Apply</span>
