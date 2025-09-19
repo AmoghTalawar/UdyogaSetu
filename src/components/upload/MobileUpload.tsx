@@ -84,7 +84,7 @@ const MobileUpload: React.FC<MobileUploadProps> = ({ uploadId }) => {
       if (supabaseResult.success) {
         // Save application to database
         await saveApplicationToSupabase({
-          method: 'qr_mobile',
+          method: 'qr',
           applicantName: applicantData.name,
           applicantEmail: applicantData.email,
           applicantPhone: applicantData.phone,
