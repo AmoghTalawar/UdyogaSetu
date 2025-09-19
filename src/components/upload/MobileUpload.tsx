@@ -138,8 +138,9 @@ const MobileUpload: React.FC<MobileUploadProps> = ({ uploadId }) => {
       };
 
       // Save application data to database
+      // For mobile uploads, we use a placeholder UUID since there's no specific job
       const applicationRecord = {
-        job_id: 'mobile-upload', // Placeholder - in real implementation this would come from QR data
+        job_id: '00000000-0000-0000-0000-000000000000', // Placeholder UUID for mobile uploads
         applicant_name: applicationData.applicantName,
         applicant_email: applicationData.applicantEmail || null,
         applicant_phone: applicationData.applicantPhone,
