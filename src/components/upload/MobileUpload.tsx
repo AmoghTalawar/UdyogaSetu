@@ -138,16 +138,16 @@ const MobileUpload: React.FC<MobileUploadProps> = ({ uploadId }) => {
       };
 
       // Save application data to database
-      // For mobile uploads, we use an existing job ID since job_id has a foreign key constraint
+      // For mobile uploads, we use NULL job_id since these are general applications not tied to specific jobs
       const applicationRecord = {
-        job_id: '1', // Use existing job ID from database (first job in mock data)
+        job_id: null, // NULL for mobile uploads (not tied to specific jobs)
         applicant_name: applicationData.applicantName,
         applicant_email: applicationData.applicantEmail || null,
         applicant_phone: applicationData.applicantPhone,
-        application_method: applicationData.method,
+        application_method: 'mobile', // Use 'mobile' method for mobile uploads
         resume_url: resumeResult?.publicUrl || null,
         resume_file_id: resumeResult?.fileId || null,
-        company_id: '00000000-0000-0000-0000-000000000000', // Placeholder UUID for mobile uploads
+        company_id: null, // NULL for mobile uploads (not tied to specific companies)
         applicant_score: calculateApplicantScore(),
         applied_at: new Date().toISOString(),
         status: 'submitted'
@@ -573,7 +573,7 @@ const MobileUpload: React.FC<MobileUploadProps> = ({ uploadId }) => {
         isOpen={showSuccessPopup}
         onClose={handleSuccessPopupClose}
         applicantName={applicantData.name}
-        applicationMethod="qr_mobile"
+        applicationMethod="mobile"
         jobTitle="Mobile Job Application"
       />
     </div>
