@@ -86,6 +86,7 @@ export const uploadResumeToSupabase = async (
           file_path: filePath,
           file_size: file.size,
           file_type: file.type,
+          file_category: FILE_CATEGORIES.RESUME,
           public_url: urlData.publicUrl,
           uploaded_at: new Date().toISOString(),
         },
