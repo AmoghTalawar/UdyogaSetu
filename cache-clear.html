@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cache Clear Test Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .clear-btn { 
+            background: #ff4444; 
+            color: white; 
+            padding: 10px 20px; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            margin: 10px;
+        }
+        .info { background: #f0f0f0; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔄 UdyogaSetu Cache Clearing Tool</h1>
+    
+    <div class="info">
+        <h3>📋 Instructions:</h3>
+        <ol>
+            <li>Click the "Clear All Caches" button below</li>
+            <li>Wait for confirmation message</li>
+            <li>Close this page and return to the main application</li>
+            <li>Hard refresh (Ctrl+Shift+R) or Ctrl+F5</li>
+            <li>Try the voice application again</li>
+        </ol>
+    </div>
+
+    <button class="clear-btn" onclick="clearAllCaches()">🗑️ Clear All Caches</button>
+    <button class="clear-btn" onclick="forceRefresh()">🔄 Force Page Refresh</button>
+
+    <div id="result"></div>
+
+    <script>
+        function clearAllCaches() {
+            const result = document.getElementById('result');
+            
+            try {
+                // Clear localStorage
+                localStorage.clear();
+                console.log('✅ Local Storage cleared');
+                
+                // Clear sessionStorage
+                sessionStorage.clear();
+                console.log('✅ Session Storage cleared');
+                
+                // Clear service worker cache
+                if ('caches' in window) {
+                    caches.keys().then(function(names) {
+                        names.forEach(function(name) {
+                            caches.delete(name);
+                            console.log('✅ Cache deleted:', name);
+                        });
+                    });
+                }
+                
+                // Clear IndexedDB (if any)
+                if ('indexedDB' in window) {
+                    indexedDB.databases().then(function(databases) {
+                        databases.forEach(function(db) {
+                            if (db.name) {
+                                indexedDB.deleteDatabase(db.name);
+                                console.log('✅ IndexedDB deleted:', db.name);
+                            }
+                        });
+                    });
+                }
+                
+                result.innerHTML = '<div class="success">✅ All caches cleared successfully! Now close this page and return to the main application.</div>';
+                
+            } catch (error) {
+                console.error('❌ Error clearing caches:', error);
+                result.innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px;">❌ Error: ' + error.message + '</div>';
+            }
+        }
+        
+        function forceRefresh() {
+            location.reload(true);
+        }
+        
+        // Auto-clear on page load
+        window.addEventListener('load', function() {
+            console.log('🔄 Cache clearing page loaded');
+        });
+    </script>
+</body>
+</html>

@@ -49,18 +49,43 @@ export const uploadResumeToSupabase = async (
   file: File
 ): Promise<SupabaseUploadResult> => {
   try {
+    // Validate and map MIME types that Supabase supports
+    const supportedMimeTypes = {
+      'application/pdf': 'application/pdf',
+      'application/msword': 'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/html': 'text/html',
+      'text/plain': 'text/plain',
+    };
+    
+    let mimeType = file.type;
+    if (!supportedMimeTypes[mimeType as keyof typeof supportedMimeTypes]) {
+      // Fallback for unsupported types based on file extension
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') mimeType = 'application/pdf';
+      else if (ext === 'doc') mimeType = 'application/msword';
+      else if (ext === 'docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      else if (ext === 'html') mimeType = 'text/html';
+      else if (ext === 'txt') mimeType = 'text/plain';
+      else mimeType = 'text/plain'; // Safe fallback
+    }
+
     // Generate unique filename
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const fileExt = file.name.split('.').pop();
     const fileName = `${uploadId}_${timestamp}.${fileExt}`;
     const filePath = `uploads/${fileName}`;
 
+    // Create a new File object with the corrected MIME type
+    const correctedFile = new File([file], file.name, { type: mimeType });
+
     // Upload file to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from(RESUME_BUCKET)
-      .upload(filePath, file, {
+      .upload(filePath, correctedFile, {
         cacheControl: '3600',
         upsert: false,
+        contentType: mimeType,
       });
 
     if (uploadError) {
@@ -85,7 +110,7 @@ export const uploadResumeToSupabase = async (
           file_name: file.name,
           file_path: filePath,
           file_size: file.size,
-          file_type: file.type,
+          file_type: mimeType,
           file_category: FILE_CATEGORIES.RESUME,
           public_url: urlData.publicUrl,
           uploaded_at: new Date().toISOString(),

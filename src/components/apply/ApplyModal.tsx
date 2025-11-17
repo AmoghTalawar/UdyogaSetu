@@ -118,36 +118,59 @@ const ApplyModal: React.FC<ApplyModalProps> = ({ isOpen, onClose, job, onSubmit 
       };
       
       // Get company_id from job data (fetch from jobs table)
-      const { data: jobData, error: jobError } = await supabase
-        .from('jobs')
-        .select('company_id')
-        .eq('id', applicationData.jobId)
-        .single();
-      
-      if (jobError) {
-        console.error('Error fetching job company_id:', jobError);
-        // Continue with null company_id as fallback
+      let companyId: string | null = null;
+      try {
+        const { data: jobData, error: jobError } = await supabase
+          .from('jobs')
+          .select('company_id')
+          .eq('id', applicationData.jobId)
+          .single();
+        
+        if (jobError) {
+          console.error('Error fetching job company_id:', jobError);
+        } else if (jobData && typeof jobData === 'object' && 'company_id' in jobData) {
+          companyId = (jobData as any).company_id || null;
+        }
+      } catch (error) {
+        console.error('Exception fetching job company_id:', error);
       }
       
-      // Save application data to database
+      // If company_id is null, get it from the job object directly
+      if (!companyId && job && typeof job === 'object' && 'company_id' in job) {
+        companyId = (job as any).company_id || null;
+      }
+      
+      // Final fallback: if no company_id found, use null to allow nullable foreign key
+      // This prevents the foreign key constraint violation
+      if (!companyId) {
+        console.warn('No company_id found for job, setting to null');
+        companyId = null; // Allow null for jobs without proper company assignment
+      }
+      
+      // Save application data to database with proper typing
       const applicationRecord = {
         job_id: applicationData.jobId,
         applicant_name: applicantData.name,
-        applicant_email: applicantData.email || null,
+        applicant_email: applicantData.email && applicantData.email.trim() ? applicantData.email : null,
         applicant_phone: applicantData.phone,
         application_method: applicationData.method,
         resume_url: resumeResult?.publicUrl || null,
         resume_file_id: resumeResult?.fileId || null,
         voice_language: applicationData.voiceLanguage || null,
         voice_transcript: applicationData.voiceTranscript || null,
-        company_id: jobData?.company_id || null,
+        company_id: companyId || null,
         applicant_score: calculateApplicantScore(),
         applied_at: new Date().toISOString(),
         status: 'submitted'
       };
       
-      // Insert into Supabase database
-      const { data: dbData, error: dbError } = await supabase
+      // DEBUG: Log the exact data being sent to identify the issue
+      console.log('DEBUG - Application record being sent:', applicationRecord);
+      console.log('DEBUG - company_id value:', companyId);
+      console.log('DEBUG - job_id value:', applicationData.jobId);
+      
+      // Insert into Supabase database with proper type assertion
+      const { data: dbData, error: dbError } = await (supabase as any)
         .from('job_applications')
         .insert([applicationRecord])
         .select();
@@ -174,9 +197,9 @@ const ApplyModal: React.FC<ApplyModalProps> = ({ isOpen, onClose, job, onSubmit 
     try {
       // Format resume as HTML and convert to PDF-like format
       const resumeContent = formatResumeAsHTML(resumeData, applicantName);
-      const resumeBlob = new Blob([resumeContent], { type: 'application/octet-stream' });
+      const resumeBlob = new Blob([resumeContent], { type: 'text/html' });
       const resumeFile = new File([resumeBlob], `${applicantName.replace(/\s+/g, '_')}_Generated_Resume.html`, {
-        type: 'application/octet-stream'
+        type: 'text/html'
       });
 
       return resumeFile;
@@ -226,7 +249,7 @@ const ApplyModal: React.FC<ApplyModalProps> = ({ isOpen, onClose, job, onSubmit 
     <div class="section">
         <h2>Skills</h2>
         <div class="skills">
-            ${resumeData.skills.map(skill => `<span class="skill">${skill}</span>`).join('')}
+            ${resumeData.skills.map((skill: any) => `<span class="skill">${skill}</span>`).join('')}
         </div>
     </div>
     ` : ''}
@@ -234,7 +257,7 @@ const ApplyModal: React.FC<ApplyModalProps> = ({ isOpen, onClose, job, onSubmit 
     ${resumeData.experience && resumeData.experience.length > 0 ? `
     <div class="section">
         <h2>Work Experience</h2>
-        ${resumeData.experience.map((exp, index) => `
+        ${resumeData.experience.map((exp: any, index: number) => `
             <div style="margin-bottom: 20px;">
                 <h3>${exp.title || 'Position'} at ${exp.company || 'Company'}</h3>
                 ${exp.duration ? `<p><em>${exp.duration}</em></p>` : ''}
@@ -247,7 +270,7 @@ const ApplyModal: React.FC<ApplyModalProps> = ({ isOpen, onClose, job, onSubmit 
     ${resumeData.education && resumeData.education.length > 0 ? `
     <div class="section">
         <h2>Education</h2>
-        ${resumeData.education.map((edu, index) => `
+        ${resumeData.education.map((edu: any, index: number) => `
             <div style="margin-bottom: 15px;">
                 <h3>${edu.degree || edu.qualification || 'Education'}</h3>
                 ${edu.institution ? `<p><strong>${edu.institution}</strong></p>` : ''}
@@ -384,7 +407,7 @@ const ApplyModal: React.FC<ApplyModalProps> = ({ isOpen, onClose, job, onSubmit 
       }
 
       // Save to Supabase with applicant information
-      await saveApplicationToSupabase(applicationData, resumeFile);
+      await saveApplicationToSupabase(applicationData, resumeFile || undefined);
 
       // Show success popup instead of just closing
       setShowSuccessPopup(true);
@@ -443,7 +466,7 @@ const ApplyModal: React.FC<ApplyModalProps> = ({ isOpen, onClose, job, onSubmit 
                       Apply to {job.title}
                     </h2>
                     <p className="text-blue-100 text-lg">
-                      {job.company} • {job.location}
+                      {job.company_name} • {job.location}
                     </p>
                   </div>
                 </div>
@@ -885,7 +908,7 @@ const ApplyModal: React.FC<ApplyModalProps> = ({ isOpen, onClose, job, onSubmit 
                     </div>
                     <div className="text-right space-y-1">
                       <div><span className="font-medium text-gray-700">Position:</span> <span className="text-blue-600">{job.title}</span></div>
-                      <div><span className="font-medium text-gray-700">Company:</span> <span className="text-gray-900">{job.company}</span></div>
+                      <div><span className="font-medium text-gray-700">Company:</span> <span className="text-gray-900">{job.company_name}</span></div>
                     </div>
                   </div>
                 </div>
