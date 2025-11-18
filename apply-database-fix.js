@@ -8,6 +8,7 @@
  * 1. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables
  * 2. Run: node apply-database-fix.js
  */
+// kbasjb
 
 const { createClient } = require('@supabase/supabase-js');
 
