@@ -1,12 +1,48 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from './database.types';
+import { createClient } from '@supabase/supabase-js';
 
-// Supabase configuration
-// You need to replace these with your actual Supabase project credentials
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'YOUR_SUPABASE_URL';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+// Simple Supabase configuration that handles missing environment variables
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+// Create client - this will fail gracefully with placeholder values
+const createSupabaseClient = () => {
+  // Check if environment variables are properly set
+  if (!supabaseUrl || !supabaseAnonKey || 
+      supabaseUrl === 'YOUR_SUPABASE_URL' || 
+      supabaseAnonKey === 'YOUR_SUPABASE_ANON_KEY' ||
+      supabaseUrl === '') {
+    
+    console.warn('⚠️ Supabase environment variables not properly configured');
+    console.warn('Required variables:');
+    console.warn('- VITE_SUPABASE_URL');
+    console.warn('- VITE_SUPABASE_ANON_KEY');
+    console.warn('');
+    console.warn('Using placeholder values. App will load but database operations will fail.');
+    
+    // Return client with placeholder values that won't crash
+    return createClient(
+      'https://placeholder.supabase.co', 
+      'placeholder-key-for-demo'
+    );
+  }
+
+  // Valid configuration
+  console.log('✅ Initializing Supabase with provided credentials');
+  return createClient(supabaseUrl, supabaseAnonKey);
+};
+
+// Export the client
+export const supabase = createSupabaseClient();
+
+// Export configuration helper
+export const getSupabaseConfig = () => ({
+  url: supabaseUrl,
+  key: supabaseAnonKey,
+  isConfigured: !!(supabaseUrl && supabaseAnonKey && 
+    supabaseUrl !== 'YOUR_SUPABASE_URL' && 
+    supabaseAnonKey !== 'YOUR_SUPABASE_ANON_KEY' &&
+    supabaseUrl !== '' && supabaseAnonKey !== '')
+});
 
 // Storage bucket names
 export const RESUME_BUCKET = 'resumes';

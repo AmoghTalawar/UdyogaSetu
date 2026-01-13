@@ -92,9 +92,11 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
       recognitionRef.current = new SpeechRecognition();
 
       if (recognitionRef.current) {
-        recognitionRef.current.continuous = true;
+        recognitionRef.current.continuous = false; // Changed from true to false for better stability
         recognitionRef.current.interimResults = true;
         recognitionRef.current.lang = selectedLanguage;
+
+        console.log('Speech recognition initialized for language:', selectedLanguage);
 
         recognitionRef.current.onresult = (event: any) => {
           let finalTranscript = '';
@@ -116,11 +118,12 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
         };
 
         recognitionRef.current.onerror = (event: any) => {
-          console.error('Speech recognition error:', event.error);
+          console.error('Speech recognition error:', event.error, event);
 
           // Handle different types of speech recognition errors
           let errorMessage = '';
           let isRecoverable = false;
+          let shouldShowError = true;
 
           switch (event.error) {
             case 'network':
@@ -132,10 +135,15 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
               isRecoverable = true;
               break;
             case 'no-speech':
-              // This is normal when no speech is detected, don't show error
+              // No speech detected - this is normal, don't show error
+              console.warn('No speech detected in audio - this is normal if user didn\'t speak');
+              shouldShowError = false;
+              isRecoverable = true;
+              // Continue with whatever was recorded
               return;
             case 'aborted':
-              errorMessage = 'Speech recognition was interrupted. Please try recording again.';
+              console.log('Speech recognition aborted - this may be normal during pause/resume');
+              shouldShowError = false;
               isRecoverable = true;
               break;
             case 'audio-capture':
@@ -151,14 +159,23 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
               isRecoverable = false;
           }
 
-          // Set a flag to indicate speech recognition is not working
-          setIsSpeechRecognitionWorking(false);
+          // Set a flag to indicate speech recognition is not working (but keep recording)
+          if (event.error !== 'no-speech' && event.error !== 'aborted') {
+            setIsSpeechRecognitionWorking(false);
+            console.warn('Speech recognition marked as not working due to error:', event.error);
+          }
 
-          // Only call onError for non-recoverable errors or let the UI handle recoverable ones
-          if (!isRecoverable) {
+          // Only call onError for non-recoverable errors
+          if (shouldShowError && !isRecoverable) {
             onError(errorMessage);
           }
         };
+
+        recognitionRef.current.onend = () => {
+           // Handle recognition ending gracefully
+           console.log('Speech recognition ended');
+           // Don't automatically restart - let it be controlled by recording state
+         };
       }
     }
   }, [selectedLanguage, onError]);
@@ -238,10 +255,14 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
         try {
           recognitionRef.current.lang = selectedLanguage;
           recognitionRef.current.start();
+          console.log('Speech recognition started for recording');
         } catch (error) {
           console.warn('Speech recognition start failed:', error);
+          setIsSpeechRecognitionWorking(false);
           // Continue with recording even if speech recognition fails
         }
+      } else {
+        console.log('Speech recognition not available or not working');
       }
 
     } catch (error) {
@@ -255,7 +276,11 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
     }
     
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.warn('Error stopping speech recognition:', error);
+      }
     }
     
     setIsRecording(false);
@@ -264,20 +289,25 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
 
   // Auto-generate resume when recording stops
   useEffect(() => {
-    if (audioBlob && transcript && !isRecording && !generatedResume && !isGeneratingResume) {
+    if (audioBlob && !isRecording && !generatedResume && !isGeneratingResume) {
       // Automatically generate resume after recording is complete
+      // Even if transcript is empty, allow user to proceed
       setTimeout(() => {
         generateResume();
-      }, 1000); // Small delay to ensure UI is ready
+      }, 500); // Small delay to ensure UI is ready
     }
-  }, [audioBlob, transcript, isRecording, generatedResume, isGeneratingResume]);
+  }, [audioBlob, isRecording, generatedResume, isGeneratingResume]);
 
   const pauseRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.pause();
     }
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.warn('Error stopping speech recognition during pause:', error);
+      }
     }
     setIsPaused(true);
   };
@@ -286,8 +316,15 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
       mediaRecorderRef.current.resume();
     }
-    if (recognitionRef.current) {
-      recognitionRef.current.start();
+    // Restart speech recognition when resuming
+    if (recognitionRef.current && isSpeechRecognitionWorking) {
+      try {
+        recognitionRef.current.lang = selectedLanguage;
+        recognitionRef.current.start();
+        console.log('Speech recognition restarted on resume');
+      } catch (error) {
+        console.warn('Error restarting speech recognition on resume:', error);
+      }
     }
     setIsPaused(false);
   };
@@ -327,32 +364,60 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
   };
 
   const generateResume = async () => {
-    if (!transcript.trim()) {
-      onError('No transcript available to generate resume');
-      return;
-    }
-
     setIsGeneratingResume(true);
     
     try {
       // Simulate processing time for better UX
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Use the improved multilingual parser
-      const resumeData = parseTranscriptToResume(transcript, selectedLanguage);
-      setGeneratedResume(resumeData);
-      
-      console.log('Resume generated:', {
-        name: resumeData.personalInfo.name,
-        experienceCount: resumeData.experience.length,
-        skillsCount: resumeData.skills.length,
-        educationCount: resumeData.education.length,
-        language: resumeData.language
-      });
+      if (transcript.trim()) {
+        // Use the improved multilingual parser if transcript exists
+        const resumeData = parseTranscriptToResume(transcript, selectedLanguage);
+        setGeneratedResume(resumeData);
+        
+        // Only log in development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Resume generated from transcript:', {
+            name: resumeData.personalInfo.name,
+            experienceCount: resumeData.experience.length,
+            skillsCount: resumeData.skills.length,
+            educationCount: resumeData.education.length,
+            language: resumeData.language
+          });
+        }
+      } else {
+        // If no transcript, create a minimal resume structure
+        if (process.env.NODE_ENV === 'development') {
+          console.info('ℹ️ No speech detected - providing empty resume template for manual entry');
+        }
+        
+        setGeneratedResume({
+          personalInfo: {
+            name: 'Your Name',
+            summary: 'Please enter your professional summary'
+          },
+          experience: [],
+          skills: [],
+          education: [],
+          language: selectedLanguage,
+          generatedAt: new Date().toISOString()
+        });
+      }
       
     } catch (error) {
-      console.error('Resume generation error:', error);
-      onError('Failed to generate resume: ' + (error as Error).message);
+      console.error('❌ Resume generation error:', error);
+      // Don't show error, just create empty resume
+      setGeneratedResume({
+        personalInfo: {
+          name: 'Your Name',
+          summary: 'Please enter your professional summary'
+        },
+        experience: [],
+        skills: [],
+        education: [],
+        language: selectedLanguage,
+        generatedAt: new Date().toISOString()
+      });
     } finally {
       setIsGeneratingResume(false);
     }
@@ -361,8 +426,24 @@ const MultilingualVoiceRecorder: React.FC<MultilingualVoiceRecorderProps> = ({
 
   const handleComplete = () => {
     if (audioBlob) {
-      // Allow completion even without transcript if speech recognition failed
-      const finalTranscript = transcript || 'Voice recording completed - transcript entered manually';
+      // Use transcript if available, otherwise use a default message
+      const finalTranscript = transcript.trim() || 'Voice recording completed (no speech detected - text details entered)';
+      
+      // Ensure we have a generated resume, even if empty
+      if (!generatedResume) {
+        setGeneratedResume({
+          personalInfo: {
+            name: 'Your Name',
+            summary: 'Please enter your professional summary'
+          },
+          experience: [],
+          skills: [],
+          education: [],
+          language: selectedLanguage,
+          generatedAt: new Date().toISOString()
+        });
+      }
+      
       onRecordingComplete(audioBlob, finalTranscript, selectedLanguage, generatedResume);
       // Reset the component after successful completion
       resetRecording();
@@ -598,7 +679,7 @@ Generated on: ${new Date(resume.generatedAt).toLocaleDateString()}
       )}
 
       {/* Transcript Section */}
-      {(transcript || !isSpeechRecognitionWorking) && (
+      {(transcript || !isSpeechRecognitionWorking || audioBlob) && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <h4 className="font-medium text-gray-900">
@@ -631,14 +712,14 @@ Generated on: ${new Date(resume.generatedAt).toLocaleDateString()}
               rows={6}
               placeholder={
                 !isSpeechRecognitionWorking
-                  ? "Please enter your personal and professional information here..."
-                  : "Edit your transcript here..."
+                  ? "Please enter your personal and professional information here (name, experience, skills, education, etc.)..."
+                  : "Edit your transcript here or add more details..."
               }
             />
           ) : (
             <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 max-h-32 overflow-y-auto">
               {transcript || (!isSpeechRecognitionWorking
-                ? 'Please manually enter your information here after recording...'
+                ? 'Please manually enter your information here after recording (name, experience, skills, education, etc.)...'
                 : 'Transcription will appear here as you speak...')}
             </div>
           )}

@@ -1,0 +1,79 @@
+services:
+  # UdyogaSetu Application Container
+  udyogasetu-app:
+    image: amogh0709/udyoga-setu:latest
+    container_name: udyogasetu-app
+    ports:
+      - "8081:80"
+    restart: always
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - udyoga-network
+
+  # Nginx Prometheus Exporter
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: nginx-exporter
+    command:
+      - -nginx.scrape-uri
+      - http://udyogasetu-app:80/stub_status
+    ports:
+      - "9300:9113"
+    depends_on:
+      - udyogasetu-app
+    restart: always
+    networks:
+      - udyoga-network
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - nginx-exporter
+    restart: always
+    networks:
+      - udyoga-network
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana-enterprise
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_storage:/var/lib/grafana
+    depends_on:
+      - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    restart: always
+    networks:
+      - udyoga-network
+
+networks:
+  udyoga-network:
+    driver: bridge
+
+volumes:
+  grafana_storage:
+  prometheus_data:

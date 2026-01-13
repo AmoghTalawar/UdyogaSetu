@@ -11,7 +11,7 @@ import {
   Zap, 
   Shield, 
   Globe, 
-  Users, 
+  Users,
   Star, 
   ChevronRight,
   Play,

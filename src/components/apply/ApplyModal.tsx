@@ -332,28 +332,28 @@ const ApplyModal: React.FC<ApplyModalProps> = ({ isOpen, onClose, job, onSubmit 
 
   const validateForm = () => {
     const errors = [];
-    
+
     if (!applicantData.name.trim()) {
       errors.push('Full name is required');
     }
-    
+
     if (!applicantData.phone.trim()) {
       errors.push('Phone number is required');
     }
-    
+
     // Email is optional, but if provided, it must be valid
     if (applicantData.email.trim() && !applicantData.email.includes('@')) {
       errors.push('Please enter a valid email format');
     }
-    
+
     if (activeTab === 'qr' && !selectedFile && !qrUploadedFile) {
       errors.push('Please upload a resume file');
     }
-    
-    if (activeTab === 'voice' && (!voiceData.audioBlob || !voiceData.transcript || !voiceData.resumeData)) {
+
+    if (activeTab === 'voice' && (!voiceData.audioBlob || !voiceData.resumeData)) {
       errors.push('Please complete voice recording and resume generation');
     }
-    
+
     return errors;
   };
 
@@ -845,8 +845,8 @@ const ApplyModal: React.FC<ApplyModalProps> = ({ isOpen, onClose, job, onSubmit 
                   </div>
                   <div className="flex items-center space-x-2 text-sm text-gray-600">
                     <div className={`w-3 h-3 rounded-full ${
-                      ((activeTab === 'qr' && (selectedFile || qrUploadedFile)) || 
-                       (activeTab === 'voice' && voiceData.resumeData)) ? 'bg-green-500' : 'bg-gray-300'
+                      ((activeTab === 'qr' && (selectedFile || qrUploadedFile)) ||
+                       (activeTab === 'voice' && voiceData.audioBlob && voiceData.resumeData)) ? 'bg-green-500' : 'bg-gray-300'
                     }`}></div>
                     <span>Ready to Submit</span>
                   </div>
@@ -869,15 +869,15 @@ const ApplyModal: React.FC<ApplyModalProps> = ({ isOpen, onClose, job, onSubmit 
                       !applicantData.phone.trim() ||
                       (applicantData.email.trim() && !applicantData.email.includes('@')) ||
                       (activeTab === 'qr' && !selectedFile && !qrUploadedFile) ||
-                      (activeTab === 'voice' && (!voiceData.audioBlob || !voiceData.transcript || !voiceData.resumeData))
+                      (activeTab === 'voice' && (!voiceData.audioBlob || !voiceData.resumeData))
                     }
                     className={`relative px-8 py-3 rounded-xl font-bold text-lg transition-all duration-200 transform ${
                       isSubmitting
                         ? 'bg-gray-400 cursor-not-allowed'
-                        : (!applicantData.name.trim() || !applicantData.phone.trim() || 
+                        : (!applicantData.name.trim() || !applicantData.phone.trim() ||
                            (applicantData.email.trim() && !applicantData.email.includes('@')) ||
                            (activeTab === 'qr' && !selectedFile && !qrUploadedFile) ||
-                           (activeTab === 'voice' && (!voiceData.audioBlob || !voiceData.transcript || !voiceData.resumeData)))
+                           (activeTab === 'voice' && (!voiceData.audioBlob || !voiceData.resumeData)))
                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                         : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 hover:scale-105 shadow-lg hover:shadow-xl'
                     }`}
